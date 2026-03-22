@@ -1,4 +1,4 @@
--- [This Script is made for Hidden Devs Application]
+--[This Script is for a game made for Hidden Devs Verification]
 -- This game is about Launching Cannonballs Basically with Tons of effects
 --This is a Module script
 
