@@ -1,3 +1,5 @@
+--updated for re-review [added more explaining comments, reduced nesting, etc]
+--[For complexity The script uses packages like knit, physics API like vectorforce, cframe math, metatables, etc]
 -- This game is about Launching Cannonballs Basically with Tons of effects
 --This is a Module script
 
@@ -32,6 +34,9 @@ local ImpactCubeLife = 1.5  -- how long cubes remain before being removed
 -- Defining a “class-like” table to handle projectiles
 local Projectile = {}
 Projectile.__index = Projectile  -- ensures that methods work correctly when called using the colon (:) syntax
+
+--[[ Wrapping projectile logic inside a class-like table so each projectile
+	manages its own physics, collisions, and effects independently to make cleanup easier:- ]]--
 
 -- Function to construct a new projectile instance
 function Projectile.new(serviceRef, templateName, spawnPos, launchDir, ownerPlayer)
@@ -239,59 +244,72 @@ function ProjectileService:PrintStats(player)
 	local stats = self.PlayerStats[player]
 	if stats then
 		local acc = stats.Shots > 0 and (stats.Hits / stats.Shots * 100) or 0
-		print(player.Name .. " | Shots: " .. stats.Shots .. " | Hits: " .. stats.Hits .. " | Accuracy: " .. math.floor(acc) .. "%")
+		print(player.Name ..
+		" | Shots: " .. stats.Shots ..
+		" | Hits: " .. stats.Hits ..
+		" | Accuracy: " .. math.floor(accuracy) .. "%")
 	end
 end
 
--- handle chat commands from the creator/admin
-function ProjectileService:HandleAdminCommand(player, msg)
-	if player.UserId ~= game.CreatorId then return end
-	local cmd = msg:lower()  -- normalize to lowercase
+-- handling Chat Commands
+function ProjectileService:HandleAdminCommand(player, message) -- Taking the player and message which we later give when fired
 
-	if cmd == "!clear" then
-		self:CleanupAll()  -- wipe all active projectiles
-	elseif cmd == "!stats" then
-		for p in pairs(self.PlayerStats) do
-			self:PrintStats(p)  -- display stats for all players
+	local command = message:lower() -- normalize to lowercase to make it non case-sensitive
+
+	if command == "!clear" then
+		self:CleanupAll() -- Firing previous cleanup function
+		return
+	end
+
+	if command == "!stats" then
+		for trackedPlayer in pairs(self.PlayerStats) do --Getting all the tracked players saved in Stats
+			self:PrintStats(trackedPlayer)
 		end
-	elseif cmd:sub(1,6) == "!kick " then
-		local target = cmd:sub(7)
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr.Name:lower() == target then
-				plr:Kick("Removed by admin")  -- remove targeted player
-				break
-			end
-		end
+		return
+	end
+
+	if command:sub(1,6) ~= "!kick " then return end --Making so kick is the only command left
+
+	local targetName = command:sub(7)
+
+	for _, targetPlayer in ipairs(Players:GetPlayers()) do
+		if targetPlayer.Name:lower() ~= targetName then continue end
+		targetPlayer:Kick("Removed by admin") -- remove targeted player
+		break
 	end
 end
 
--- initialize the service
+
+-- initialize the service [Writing what would run when module is called]
 function ProjectileService:KnitStart()
+
 	-- connect cannon click detectors to launch projectiles
-	for _, cannon in ipairs(CannonFolder:GetChildren()) do
-		local clicker = cannon:FindFirstChild("ClickDetector")
-		if clicker then
-			clicker.MouseClick:Connect(function(player)
-				self:LaunchFrom(cannon, player)
-			end)
-		end
+	for _, cannon in ipairs(CannonFolder:GetChildren()) do --Looping through Cannon Folder
+		local clickDetector = cannon:FindFirstChild("ClickDetector")
+		if not clickDetector then continue end -- using continue to skip through non,Clickdetectors to get all of them
+
+		clickDetector.MouseClick:Connect(function(player) --Firing everytime Plr clicks cannon
+			self:LaunchFrom(cannon, player)
+		end)
 	end
+
 
 	-- update projectiles every frame and apply gravity
-	RS.Heartbeat:Connect(function()
-		for i = #activeShots, 1, -1 do
-			local proj = activeShots[i]
-			if not proj or not proj.Part or proj.HasCollided then
-				table.remove(activeShots, i)  -- remove inactive projectiles
+	RunService.Heartbeat:Connect(function()
+		for i = #ActiveProjectiles, 1, -1 do --Looping through amount of Acrive projectiles
+			local projectile = ActiveProjectiles[i] --Getting one by one with index of loop
+	
+			if projectile and projectile.Part and not projectile.HasCollided then
+				projectile:Update()
 			else
-				proj:Update()  -- move active projectiles
+				table.remove(ActiveProjectiles, i) --table.remove() removes inside a table so removing the projectiles
 			end
 		end
 	end)
 
 	-- clear player stats when they leave
 	Players.PlayerRemoving:Connect(function(p)
-		self.PlayerStats[p] = nil
+		self.PlayerStats[p] = nil --Making the value named them inside StatList nil
 	end)
 
 	-- connect chat commands for new players
